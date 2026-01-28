@@ -1,34 +1,265 @@
-# Gradle files
-.gradle/
-build/
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Organização Financeira</title>
 
-# Local configuration file (sdk path, etc)
-local.properties
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-# Log/OS Files
-*.log
+<style>
+body {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  background: #f4f6f6;
+  color: #0f3d3e;
+}
 
-# Android Studio generated files and folders
-captures/
-.externalNativeBuild/
-.cxx/
-*.aab
-*.apk
-output-metadata.json
+.container {
+  max-width: 1200px;
+  margin: auto;
+  padding: 20px;
+}
 
-# IntelliJ
-*.iml
-.idea/
-misc.xml
-deploymentTargetDropDown.xml
-render.experimental.xml
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 15px;
+}
 
-# Keystore files
-*.jks
-*.keystore
+.card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 15px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.06);
+}
 
-# Google Services (e.g. APIs or Firebase)
-google-services.json
+.card h3 {
+  font-size: 14px;
+  color: #4f7c7d;
+  margin-bottom: 8px;
+}
 
-# Android Profiling
-*.hprof
+.card p {
+  font-size: 22px;
+  font-weight: bold;
+}
+
+.dashboard {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-top: 25px;
+}
+
+input, button {
+  width: 100%;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+}
+
+button {
+  background: #0f7c7d;
+  color: #fff;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+button:hover {
+  opacity: .9;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 10px;
+}
+
+th, td {
+  padding: 6px;
+  font-size: 14px;
+}
+
+th {
+  color: #4f7c7d;
+  text-align: left;
+}
+
+.progress {
+  background: #e0e0e0;
+  border-radius: 10px;
+  overflow: hidden;
+  height: 14px;
+}
+
+.progress span {
+  display: block;
+  height: 100%;
+  background: #0f7c7d;
+  width: 0%;
+}
+
+@media (max-width: 768px) {
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<h1>Organize seu Salário</h1>
+
+<div class="cards">
+  <div class="card">
+    <h3>Salário</h3>
+    <input type="number" id="salario">
+  </div>
+
+  <div class="card">
+    <h3>Total de Gastos</h3>
+    <p id="totalGastos">R$ 0,00</p>
+  </div>
+
+  <div class="card">
+    <h3>Restante</h3>
+    <p id="restante">R$ 0,00</p>
+  </div>
+</div>
+
+<div class="dashboard">
+
+<div class="card">
+  <h3>Restante para gastar</h3>
+  <canvas id="donut"></canvas>
+
+  <h3 style="margin-top:20px">Reserva de emergência</h3>
+  <input type="number" id="metaReserva" placeholder="Meta (R$)">
+  <input type="number" id="valorReserva" placeholder="Valor reservado">
+  <div class="progress"><span id="barraReserva"></span></div>
+</div>
+
+<div class="card">
+  <h3>Gastos</h3>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Nome</th>
+        <th>Valor</th>
+        <th>%</th>
+      </tr>
+    </thead>
+    <tbody id="listaGastos"></tbody>
+  </table>
+
+  <button onclick="adicionarGasto()">+ Adicionar gasto</button>
+
+  <canvas id="barras" style="margin-top:15px"></canvas>
+</div>
+
+</div>
+</div>
+
+<script>
+const salario = document.getElementById("salario");
+const listaGastos = document.getElementById("listaGastos");
+const totalGastosEl = document.getElementById("totalGastos");
+const restanteEl = document.getElementById("restante");
+const metaReserva = document.getElementById("metaReserva");
+const valorReserva = document.getElementById("valorReserva");
+const barraReserva = document.getElementById("barraReserva");
+
+let donutChart, barChart;
+
+function salvar() {
+  localStorage.setItem("dados", JSON.stringify({
+    salario: salario.value,
+    gastos: [...listaGastos.children].map(l => ({
+      nome: l.children[0].querySelector("input").value,
+      valor: l.children[1].querySelector("input").value
+    })),
+    metaReserva: metaReserva.value,
+    valorReserva: valorReserva.value
+  }));
+}
+
+function carregar() {
+  const dados = JSON.parse(localStorage.getItem("dados"));
+  if (!dados) return;
+
+  salario.value = dados.salario || 0;
+  metaReserva.value = dados.metaReserva || 0;
+  valorReserva.value = dados.valorReserva || 0;
+
+  dados.gastos.forEach(g => criarLinha(g.nome, g.valor));
+}
+
+function criarLinha(nome="", valor=0) {
+  const tr = document.createElement("tr");
+
+  tr.innerHTML = `
+    <td><input value="${nome}" oninput="atualizar()"></td>
+    <td><input type="number" value="${valor}" oninput="atualizar()"></td>
+    <td class="percentual">0%</td>
+  `;
+
+  listaGastos.appendChild(tr);
+}
+
+function adicionarGasto() {
+  criarLinha();
+  atualizar();
+}
+
+function atualizar() {
+  const s = Number(salario.value);
+  let total = 0;
+  let labels = [];
+  let valores = [];
+
+  [...listaGastos.children].forEach(tr => {
+    const valor = Number(tr.children[1].querySelector("input").value);
+    total += valor;
+    labels.push(tr.children[0].querySelector("input").value || "Gasto");
+    valores.push(valor);
+
+    tr.querySelector(".percentual").innerText =
+      s ? ((valor / s) * 100).toFixed(1) + "%" : "0%";
+  });
+
+  totalGastosEl.innerText = total.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+  restanteEl.innerText = (s - total).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+
+  if (donutChart) donutChart.destroy();
+  donutChart = new Chart(donut, {
+    type: "doughnut",
+    data: { datasets: [{ data: [total, Math.max(s-total,0)], backgroundColor: ["#c0392b","#0f7c7d"] }] }
+  });
+
+  if (barChart) barChart.destroy();
+  barChart = new Chart(barras, {
+    type: "bar",
+    data: { labels, datasets: [{ data: valores, backgroundColor:"#0f7c7d" }] },
+    options: { indexAxis: "y" }
+  });
+
+  const meta = Number(metaReserva.value);
+  const reservado = Number(valorReserva.value);
+  barraReserva.style.width = meta ? Math.min((reservado/meta)*100,100)+"%" : "0%";
+
+  salvar();
+}
+
+[salario, metaReserva, valorReserva].forEach(i => i.addEventListener("input", atualizar));
+
+carregar();
+if (!listaGastos.children.length) adicionarGasto();
+atualizar();
+</script>
+
+</body>
+</html>
